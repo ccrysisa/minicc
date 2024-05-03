@@ -162,7 +162,7 @@ void next()
                     token = current_id[Token];
                     return;
                 }
-                current_id += IdSize;
+                current_id = current_id + IdSize;
             }
 
             // store new ID
@@ -497,9 +497,9 @@ int eval()
         } else if (op == ENT) {  // make new stack frame
             *--sp = (int) bp;
             bp = sp;
-            sp -= *pc++;
+            sp = sp - *pc++;
         } else if (op == ADJ) {  // add esp, <size>
-            sp += *pc++;
+            sp = sp + *pc++;
         } else if (op == LEV) {  // restore call frame and PC
             sp = bp;
             bp = (int *) *sp++;
