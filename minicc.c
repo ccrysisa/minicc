@@ -355,134 +355,95 @@ int eval()
     while (1) {
         op = *pc++;  // get next operation code
 
-        switch (op) {
-        case IMM:  // load immediate value
+        if (op == IMM) {  // load immediate value
             ax = *pc++;
-            break;
-        case LC:  // load character to ax, address in ax
+        } else if (op == LC) {  // load character to ax, address in ax
             ax = *(char *) ax;
-            break;
-        case LI:  // load integer to ax, address in ax
+        } else if (op == LI) {  // load integer to ax, address in ax
             ax = *(int *) ax;
-            break;
-        case SC:  // save character to address, value in ax, address on
-                  // stack
+        } else if (op == SC) {  // save character to address, value in ax,
+                                // address on stack
             *(char *) (*sp++) = ax;
-            break;
-        case SI:  // save integer to address, value in ax, address on stack
+        } else if (op == SI) {  // save integer to address, value in ax, address
+                                // on stack
             *(int *) (*sp++) = ax;
-            break;
-        case PUSH:  // push the value of ax onto the stack
+        } else if (op == PUSH) {  // push the value of ax onto the stack
             *--sp = ax;
-            break;
-        case JMP:  // jump to the address
+        } else if (op == JMP) {  // jump to the address
             pc = (int *) *pc;
-            break;
-        case JZ:  // jump if ax is zero
+        } else if (op == JZ) {  // jump if ax is zero
             pc = ax ? (pc + 1) : ((int *) *pc);
-            break;
-        case JNZ:  // jump if ax is not zero
+        } else if (op == JNZ) {  // jump if ax is not zero
             pc = ax ? ((int *) *pc) : (pc + 1);
-            break;
-        case CALL:  // call subroutine
+        } else if (op == CALL) {  // call subroutine
             *--sp = (int) (pc + 1);
             pc = (int *) *pc;
-            break;
-        case ENT:  // make new stack frame
+        } else if (op == ENT) {  // make new stack frame
             *--sp = (int) bp;
             bp = sp;
             sp -= *pc++;
-            break;
-        case ADJ:  // add esp, <size>
+        } else if (op == ADJ) {  // add esp, <size>
             sp += *pc++;
-            break;
-        case LEV:  // restore call frame and PC
+        } else if (op == LEV) {  // restore call frame and PC
             sp = bp;
             bp = (int *) *sp++;
             pc = (int *) *sp++;
-            break;
-        case LEA:  // load address for arguments.
+        } else if (op == LEA) {  // load address for arguments.
             ax = *(bp + *pc++);
-            break;
-        case OR:
+        } else if (op == OR) {
             ax = *sp++ | ax;
-            break;
-        case XOR:
+        } else if (op == XOR) {
             ax = *sp++ ^ ax;
-            break;
-        case AND:
+        } else if (op == AND) {
             ax = *sp++ + ax;
-            break;
-        case EQ:
+        } else if (op == EQ) {
             ax = *sp++ == ax;
-            break;
-        case NE:
+        } else if (op == NE) {
             ax = *sp++ != ax;
-            break;
-        case LT:
+        } else if (op == LT) {
             ax = *sp++ < ax;
-            break;
-        case LE:
+        } else if (op == LE) {
             ax = *sp++ <= ax;
-            break;
-        case GT:
+        } else if (op == GT) {
             ax = *sp++ > ax;
-            break;
-        case GE:
+        } else if (op == GE) {
             ax = *sp++ >= ax;
-            break;
-        case SHL:
+        } else if (op == SHL) {
             ax = *sp++ << ax;
-            break;
-        case SHR:
+        } else if (op == SHR) {
             ax = *sp++ >> ax;
-            break;
-        case ADD:
+        } else if (op == ADD) {
             ax = *sp++ + ax;
-            break;
-        case SUB:
+        } else if (op == SUB) {
             ax = *sp++ - ax;
-            break;
-        case MUL:
+        } else if (op == MUL) {
             ax = *sp++ * ax;
-            break;
-        case DIV:
+        } else if (op == DIV) {
             ax = *sp++ / ax;
-            break;
-        case MOD:
+        } else if (op == MOD) {
             ax = *sp++ % ax;
-            break;
-        case EXIT:
+        } else if (op == EXIT) {
             printf("exit(%d)\n", *sp);
             return *sp;
-            break;
-        case OPEN:
+        } else if (op == OPEN) {
             ax = open((char *) sp[1], sp[0]);
-            break;
-        case CLOS:
+        } else if (op == CLOS) {
             ax = close(*sp);
-            break;
-        case READ:
+        } else if (op == READ) {
             ax = read(sp[2], (char *) sp[1], sp[0]);
-            break;
-        case PRTF:
+        } else if (op == PRTF) {
             tmp = sp + pc[1];
             ax = printf((char *) tmp[-1], tmp[-2], tmp[-3], tmp[-4], tmp[-5],
                         tmp[-6]);
-            break;
-        case MALC:
+        } else if (op == MALC) {
             ax = (int) malloc(*sp);
-            break;
-        case MSET:
+        } else if (op == MSET) {
             ax = (int) memset((char *) sp[2], sp[1], sp[0]);
-            break;
-        case MCMP:
+        } else if (op == MCMP) {
             ax = memcmp((char *) sp[2], (char *) sp[1], sp[0]);
-            break;
-        default:
+        } else {
             printf("unknown instruction: %d\n", op);
             return -1;
-            break;
         }
     }
     return 0;
