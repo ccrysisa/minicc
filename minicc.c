@@ -349,7 +349,247 @@ void match(int tk)
 
 void expression(int level)
 {
-    // unimplement
+    // expressions have various format.
+    // but majorly can be divided into two parts: unit and operator
+    // for example `(char) *a[10] = (int *) func(b > 0 ? 10 : 20);
+    // `a[10]` is an unit while `*` is an operator.
+    // `func(...)` in total is an unit.
+    // so we should first parse those unit and unary operators
+    // and then the binary ones
+    //
+    // also the expression can be in the following types:
+    //
+    // 1. unit_unary ::= unit | unit unary_op | unary_op unit
+    // 2. expr ::= unit_unary (bin_op unit_unary ...)
+
+    int *id;
+    int tmp;
+    int *addr;
+
+    // unit_unary()
+    if (token == Num) {
+        match(Num);
+
+        // emit code
+        *++text = IMM;
+        *++text = token_val;
+        expr_type = INT;
+    } else if (token == '"') {  // string
+        // emit code;
+        *++text = IMM;
+        *++text = token_val;
+
+        match('"');
+        // store the rest strings
+        while (token == '"') {
+            match('"');
+        }
+
+        // append the end of string character '\0', all the data are default
+        // to 0, so just move data one position forward.
+        data = (char *) (((int) data + sizeof(int)) & (-sizeof(int)));
+        expr_type = PTR;
+    } else if (Sizeof) {
+        // sizeof is actually an unary operator
+        // now only `sizeof(int)`, `sizeof(char)` and `sizeof(int/char *...)`
+        // are supported.
+
+        match(Sizeof);
+        match('(');
+        expr_type = INT;
+
+        if (token == Int) {
+            match(Int);
+        } else if (token == Char) {
+            expr_type = CHAR;
+            match(Char);
+        }
+
+        while (token == Mul) {
+            expr_type = expr_type + PTR;
+            match(Mul);
+        }
+
+        match(')');
+
+        // emit code
+        *++text = IMM;
+        *++text = (expr_type == CHAR) ? sizeof(char) : sizeof(int);
+
+        expr_type = INT;
+    } else if (token == Id) {
+        // there are several type when occurs to Id
+        // but this is unit, so it can only be
+        // 1. function call
+        // 2. Enum variable
+        // 3. global/local variable
+
+        match(Id);
+        id = current_id;
+
+        if (token == '(') {  // function call
+            match('(');
+
+            // pass in arguments
+            tmp = 0;  // number of arguments
+            while (token != ')') {
+                expression(Assign);
+                *++text = PUSH;
+                ++tmp;
+
+                if (token == ',') {
+                    match(',');
+                }
+            }
+            match(')');
+
+            // emit code
+            if (id[Class] == Sys) {  // system functions
+                *++text = id[Value];
+            } else if (id[Class] == Fun) {  // function call
+                *++text = CALL;
+                *++text = id[Value];
+            } else {
+                printf("%d: bad function call\n", line);
+                exit(-1);
+            }
+
+            // clean the stack for arguments
+            if (tmp > 0) {
+                *++text = ADJ;
+                *++text = tmp;
+            }
+
+            expr_type = id[Type];
+        } else if (id[Class] == Num) {  // enum
+            *++text = IMM;
+            *++text = id[Value];
+            expr_type = INT;
+        } else {  // variable
+            if (id[Class] == Loc) {
+                *++text = LEA;
+                *++text = index_of_bp - id[Value];
+            } else if (id[Class] == Glo) {
+                *++text = IMM;
+                *++text = id[Value];
+            } else {
+                printf("%d: undefined variable\n", line);
+                exit(-1);
+            }
+            // emit code
+            // default behaviour is to load the value of the address which is
+            // stored in `ax`
+            expr_type = id[Type];
+            *++text = (expr_type == Char) ? LC : LI;
+        }
+    } else if (token == '(') {  // cast or parenthesis
+        match('(');
+
+        if (token == Int || token == Char) {
+            tmp = (token == Char) ? CHAR : INT;  // cast type
+            match(token);
+
+            while (token == Mul) {
+                match(Mul);
+                tmp = tmp + PTR;
+            }
+
+            match(')');
+            expression(Inc);  // cast has precedence as Inc(++)
+            expr_type = tmp;
+        } else {  // normal parenthesis
+            expression(Assign);
+            match(')');
+        }
+    } else if (token == Mul) {  // dereference *<addr>
+        match(Mul);
+        expression(Inc);  // dereference has the same precedence as Inc(++)
+
+        if (expr_type >= PTR) {
+            expr_type = expr_type - PTR;
+        } else {
+            printf("%d: bad dereference\n", line);
+            exit(-1);
+        }
+
+        *++text = (expr_type == CHAR) ? LC : LI;
+    } else if (token == And) {  // get the address of
+        match(And);
+        expression(Inc);
+
+        if (*text == LC || *text == LI) {
+            text--;
+        } else {
+            printf("%d: bad address\n", line);
+            exit(-1);
+        }
+
+        expr_type = expr_type + PTR;
+    } else if (token == '!') {  // not
+        match('!');
+        expression(Inc);
+
+        // emit code, use <expr> == 0
+        *++text = PUSH;
+        *++text = IMM;
+        *++text = 0;
+        *++text = EQ;
+
+        expr_type = INT;
+    } else if (token == '~') {  // bitwise not
+        match('~');
+        expression(Inc);
+
+        // emit code, use <expr> ^ 0xFFFF(-1)
+        *++text = PUSH;
+        *++text = IMM;
+        *++text = -1;
+        *++text = XOR;
+
+        expr_type = INT;
+    } else if (token == Add) {  // +var, do nothing
+        match(Add);
+        expression(Inc);
+
+        expr_type = INT;
+    } else if (token == Sub) {  // -var
+        match(Sub);
+
+        if (token == Num) {
+            *++text = IMM;
+            *++text = -token_val;
+            match(Num);
+        } else {  // -x == -1 * x
+            expression(Inc);
+            *++text = PUSH;
+            *++text = IMM;
+            *++text = -1;
+            *++text = MUL;
+        }
+
+        expr_type = INT;
+    } else if (token == Inc || token == Dec) {
+        tmp = token;
+        match(token);
+        expression(Inc);
+
+        if (*text == LC) {
+            *text = PUSH;
+            *++text = LC;
+        } else if (*text == LI) {
+            *text = PUSH;
+            *++text = LI;
+        } else {
+            printf("%d: bad lvalue of pre-increment\n", line);
+            exit(-1);
+        }
+
+        *++text = PUSH;
+        *++text = IMM;
+        *++text = (expr_type > PTR) ? sizeof(int) : sizeof(char);
+        *++text = (tmp == Inc) ? ADD : SUB;
+        *++text = (expr_type == CHAR) ? SC : SI;
+    }
 }
 
 void statement()
