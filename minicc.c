@@ -153,7 +153,7 @@ void next()
                 src++;
             }
 
-            // look for existing identifier, liner search
+            // look for existing identifier, linear search
             current_id = symbols;
             while (current_id[Token]) {
                 if (current_id[Hash] == hash &&
@@ -185,8 +185,8 @@ void next()
                     // hex
                     token = *++src;
                     while ((token >= '0' && token <= '9') ||
-                           (token >= 'a' && token <= 'z') ||
-                           (token >= 'A' && token <= 'Z')) {
+                           (token >= 'a' && token <= 'f') ||
+                           (token >= 'A' && token <= 'F')) {
                         token_val = token_val * 16 + (token & 15) +
                                     (token >= 'A' ? 9 : 0);
                         token = *++src;
@@ -256,7 +256,7 @@ void next()
             }
             return;
         } else if (token == '-') {
-            // parse '-' amd '--'
+            // parse '-' and '--'
             if (*src == '-') {
                 ++src;
                 token = Dec;
@@ -390,7 +390,7 @@ void expression(int level)
             // to 0, so just move data one position forward.
             data = (char *) (((int) data + sizeof(int)) & (-sizeof(int)));
             expr_type = PTR;
-        } else if (Sizeof) {
+        } else if (token == Sizeof) {
             // sizeof is actually an unary operator
             // now only `sizeof(int)`, `sizeof(char)` and `sizeof(int/char
             // *...)` are supported.
@@ -481,7 +481,7 @@ void expression(int level)
                 // default behaviour is to load the value of the address which
                 // is stored in `ax`
                 expr_type = id[Type];
-                *++text = (expr_type == Char) ? LC : LI;
+                *++text = (expr_type == CHAR) ? LC : LI;
             }
         } else if (token == '(') {  // cast or parenthesis
             match('(');
@@ -575,7 +575,7 @@ void expression(int level)
             expression(Inc);
 
             if (*text == LC) {
-                *text = PUSH;
+                *text = PUSH;  // to duplicate the address
                 *++text = LC;
             } else if (*text == LI) {
                 *text = PUSH;
@@ -590,6 +590,9 @@ void expression(int level)
             *++text = (expr_type > PTR) ? sizeof(int) : sizeof(char);
             *++text = (tmp == Inc) ? ADD : SUB;
             *++text = (expr_type == CHAR) ? SC : SI;
+        } else {
+            printf("%d: bad expression\n", line);
+            exit(-1);
         }
     }
 
@@ -611,7 +614,7 @@ void expression(int level)
                 expression(Assign);
 
                 expr_type = tmp;
-                *text = (expr_type == CHAR) ? SC : SI;
+                *++text = (expr_type == CHAR) ? SC : SI;
             } else if (token == Cond) {
                 // expr ? a : b;
                 match(Cond);
@@ -629,7 +632,7 @@ void expression(int level)
                 *addr = (int) (text + 3);
                 *++text = JMP;
                 addr = ++text;
-                expression(Assign);
+                expression(Cond);
                 *addr = (int) (text + 1);
             } else if (token == Lor) {
                 // logic or
@@ -646,6 +649,13 @@ void expression(int level)
                 addr = ++text;
                 expression(Or);
                 *addr = (int) (text + 1);
+                expr_type = INT;
+            } else if (token == Or) {
+                // bitwise or
+                match(Or);
+                *++text = PUSH;
+                expression(Xor);
+                *++text = OR;
                 expr_type = INT;
             } else if (token == Xor) {
                 // bitwise xor
@@ -673,7 +683,7 @@ void expression(int level)
                 match(Ne);
                 *++text = PUSH;
                 expression(Lt);
-                *++text = Ne;
+                *++text = NE;
                 expr_type = INT;
             } else if (token == Lt) {
                 // less than <
@@ -755,7 +765,7 @@ void expression(int level)
                     *++text = SUB;
                     expr_type = tmp;
                 } else {
-                    // numeral substraction
+                    // numeral subtraction
                     *++text = SUB;
                     expr_type = tmp;
                 }
@@ -948,7 +958,7 @@ void function_parameter()
             match(Char);
         }
 
-        // pointer typr, e.g. int ****a
+        // pointer type, e.g. int ****a
         while (token == Mul) {
             match(Mul);
             type = type + PTR;
@@ -1150,7 +1160,7 @@ void global_declaration()
             type = type + PTR;
         }
 
-        if (token != Id) {  // identifier declaration
+        if (token != Id) {  // invalid declaration
             printf("%d: bad global declaration\n", line);
             exit(-1);
         }
@@ -1291,6 +1301,7 @@ int eval()
 int main(int argc, char **argv)
 {
     int i, fd;
+    int *tmp;
 
     argc--;
     argv++;
@@ -1331,7 +1342,7 @@ int main(int argc, char **argv)
     ax = 0;
 
     src =
-        "char else enum if int return sizeof while"
+        "char else enum if int return sizeof while "
         "open read close printf malloc memset memcmp exit void main";
 
     // add keywords to symbol table
@@ -1371,5 +1382,20 @@ int main(int argc, char **argv)
     close(fd);
 
     program();
+
+    if (!(pc = (int *) idmain[Value])) {
+        printf("main() not defined\n");
+        return -1;
+    }
+
+    // setup stack
+    sp = (int *) ((int) stack + pool_size);
+    *--sp = EXIT;  // call exit if main returns
+    *--sp = PUSH;  // put exit code to stack from ax
+    tmp = sp;
+    *--sp = argc;
+    *--sp = (int) argv;
+    *--sp = (int) tmp;  // set returen address of main
+
     return eval();
 }
