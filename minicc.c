@@ -1244,7 +1244,7 @@ int eval()
         } else if (op == XOR) {
             ax = *sp++ ^ ax;
         } else if (op == AND) {
-            ax = *sp++ + ax;
+            ax = *sp++ & ax;
         } else if (op == EQ) {
             ax = *sp++ == ax;
         } else if (op == NE) {
